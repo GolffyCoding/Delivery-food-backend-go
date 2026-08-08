@@ -1,0 +1,82 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: opendelivery
+      POSTGRES_PASSWORD: opendelivery
+      POSTGRES_DB: opendelivery
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opendelivery"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  nats:
+    image: nats:alpine
+    command: "-js"
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+
+  backend:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: opendelivery
+      DB_PASSWORD: opendelivery
+      DB_NAME: opendelivery
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      NATS_URL: nats://nats:4222
+      NATS_ENABLED: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+
+  worker:
+    build: .
+    command: ["/app/worker"]
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: opendelivery
+      DB_PASSWORD: opendelivery
+      DB_NAME: opendelivery
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      NATS_URL: nats://nats:4222
+      NATS_ENABLED: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+
+volumes:
+  pgdata:
+  redisdata:
